@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>中医体质辨识与健康管理报告 </title>
+    <style>
+        :root { --primary-brown: #5d4037; --accent-tan: #8d6e63; --soft-bg: #fdfaf5; --text-color: #333; --safe-green: #388e3c; }
+        body { font-family: "Microsoft YaHei", serif; background: var(--soft-bg); color: var(--text-color); padding: 20px; line-height: 1.6; }
+        .container { max-width: 900px; margin: 0 auto; background: #fff; padding: 30px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
+        h1 { text-align: center; color: var(--primary-brown); margin-bottom: 5px; }
+        .subtitle { text-align: center; color: #777; margin-bottom: 30px; font-size: 0.9em; }
+        .info-card { background: #f1ede7; padding: 15px; border-left: 5px solid var(--accent-tan); margin-bottom: 25px; font-size: 14px; }
+        .section-title { background: var(--primary-brown); color: white; padding: 8px 15px; margin: 25px 0 10px; border-radius: 4px; font-size: 1.1em; }
+        .question { margin-bottom: 12px; padding: 10px 0; border-bottom: 1px solid #f0f0f0; }
+        .q-text { font-weight: bold; display: block; margin-bottom: 8px; font-size: 15px; }
+        .options { display: flex; justify-content: space-between; max-width: 600px; }
+        .opt-label { font-size: 12px; color: #666; display: flex; flex-direction: column; align-items: center; cursor: pointer; }
+        button { width: 100%; padding: 20px; background: var(--primary-brown); color: white; border: none; border-radius: 8px; font-size: 20px; font-weight: bold; cursor: pointer; margin: 40px 0; transition: 0.3s; }
+        button:hover { background: #3e2723; }
+        
+        #report { display: none; border: 2px solid var(--primary-brown); padding: 30px; border-radius: 12px; background: #fffaf0; margin-top: 20px; }
+        .score-bar-container { margin: 15px 0; }
+        .bar-bg { height: 12px; background: #e0e0e0; border-radius: 6px; overflow: hidden; margin-top: 5px; }
+        .bar-fill { height: 100%; background: var(--accent-tan); width: 0; transition: width 1s; }
+        .advice-section { margin-top: 20px; padding: 15px; background: white; border-left: 4px solid var(--primary-brown); border-radius: 0 8px 8px 0; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .tag { display: inline-block; background: var(--accent-tan); color: white; padding: 2px 10px; border-radius: 20px; font-size: 12px; margin-bottom: 8px; }
+        .result-header { border-bottom: 2px double var(--primary-brown); padding-bottom:10px; margin-bottom: 20px; text-align: center; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>中医体质辨识与健康管理系统</h1>
+    <p class="subtitle"></p>
+
+    <div class="info-card">
+        <strong>测评说明：</strong>请根据近一年的实际感受回答。评分：1(没有)、2(很少)、3(有时)、4(经常)、5(总是)。<br>
+        系统将根据《中醫體質辨識》量表自动计算转化分并提供养生建议。
+    </div>
+
+    <form id="quizForm">
+        <div id="questions-container"></div>
+        <button type="button" onclick="calculateResult()">分析体质并生成报告</button>
+    </form>
+
+    <div id="report">
+        <div class="result-header"><h2>数字化体质诊断报告</h2></div>
+        <div id="scoreResults"></div>
+        <div id="adviceContent"></div>
+    </div>
+</div>
+
+<script>
+// 严格对照课件的9种体质题目
+const bodyTypes = [
+    { id: "qi", name: "气虚质", questions: ["容易疲乏", "容易气短", "容易心慌", "容易头晕或站起时晕眩", "比别人容易感冒", "喜欢安静、懒得说话", "说话声音低弱无力", "活动稍大就出虚汗"] },
+    { id: "yang", name: "阳虚质", questions: ["手脚发凉", "胃脘、背部或腰膝怕冷", "感到怕冷、衣服穿得多", "受不了寒冷（如空调）", "吃凉东西感到不舒服", "受凉或吃凉后容易腹泻"] },
+    { id: "yin", name: "阴虚质", questions: ["感到手脚心发热", "感到口干咽燥、总想喝水", "感到面部潮红或有烘热感", "皮肤或嘴唇干燥", "感到眼睛干涩", "经常大便干燥"] },
+    { id: "tan", name: "痰湿质", questions: ["感到胸闷或腹部胀满", "感到身体沉重、不轻松", "额部油腻", "上肢或下肢浮肿", "舌苔厚腻或感到舌体胖大", "咽部有异物感（痰）"] },
+    { id: "shi", name: "湿热质", questions: ["面部或鼻部有油腻感", "容易生痤疮或疮疖", "感到口苦或嘴里有异味", "大便黏滞不爽、有解不尽感", "小便尿色浓（深）", "阴部潮湿"] },
+    { id: "yu", name: "血瘀质", questions: ["皮肤常出现紫斑（瘀青）", "皮肤常有晦暗或色素沉着", "容易出现黑眼圈", "口唇颜色晦暗", "舌质紫暗或有瘀点", "身体某处常有刺痛感"] },
+    { id: "qiyu", name: "气郁质", questions: ["感到闷闷不乐、情绪低沉", "多愁善感、感情脆弱", "容易精神紧张、焦虑不安", "容易感到害怕或受到惊吓", "肋肋部胀满", "无缘无故叹气"] },
+    { id: "te", name: "特禀质", questions: ["容易过敏（食物、花粉、药物）", "容易打喷嚏", "容易鼻塞、流涕", "容易患哮喘", "容易因过敏出现风团/风疹", "皮肤划痕处容易发红"] },
+    { id: "ping", name: "平和质", questions: ["精力充沛", "说话声音洪亮", "处事乐观"] }
+];
+
+// 初始化渲染
+function init() {
+    const container = document.getElementById('questions-container');
+    bodyTypes.forEach(type => {
+        container.innerHTML += `<div class="section-title">${type.name}测评</div>`;
+        type.questions.forEach((q, i) => {
+            container.innerHTML += `
+                <div class="question">
+                    <span class="q-text">${i+1}. 您是否${q}？</span>
+                    <div class="options">
+                        ${[1,2,3,4,5].map(v => `
+                            <label class="opt-label">
+                                <input type="radio" name="${type.id}_${i}" value="${v}" ${v===1?'checked':''}>
+                                ${v==1?'没有':v==5?'总是':v}
+                            </label>
+                        `).join('')}
+                    </div>
+                </div>`;
+        });
+    });
+}
+init();
+
+function calculateResult() {
+    const results = {};
+    bodyTypes.forEach(type => {
+        const n = type.questions.length;
+        let sum = 0;
+        for(let i=0; i<n; i++) {
+            sum += parseInt(document.querySelector(`input[name="${type.id}_${i}"]:checked`).value);
+        }
+        // 公式：转化分 = [(原始分 - 条目数) / (条目数 * 4)] * 100
+        results[type.name] = Math.round(((sum - n) / (n * 4)) * 100);
+    });
+
+    document.getElementById('report').style.display = 'block';
+    
+    // 渲染得分条
+    let scoreHtml = "";
+    for(let name in results) {
+        if(name === "平和质") continue;
+        let s = results[name];
+        let status = s >= 40 ? "是" : (s >= 30 ? "倾向是" : "否");
+        let color = s >= 40 ? "#d32f2f" : (s >= 30 ? "#f57c00" : "#388e3c");
+        scoreHtml += `
+            <div class="score-bar-container">
+                <strong>${name}: ${s}分</strong> - <span style="color:${color}">${status}</span>
+                <div class="bar-bg"><div class="bar-fill" style="width:${s}%; background:${color}"></div></div>
+            </div>`;
+    }
+    document.getElementById('scoreResults').innerHTML = scoreHtml;
+
+    // 严选自讲义的健康建议
+    let advHtml = "<h3>【中医健康管理方案】</h3>";
+    
+    const adviceMap = {
+        "气虚质": { tag: "益气健脾", food: "黄芪、山药、大枣", medicine: "补中益气丸", life: "推荐八段锦，避免大汗淋漓" },
+        "阳虚质": { tag: "温补脾肾", food: "生姜、韭菜炒虾仁、牛肉", medicine: "金匮肾气丸、右归丸", life: "早卧晚起必待日光，下肢保暖" },
+        "阴虚质": { tag: "滋阴润燥", food: "百合、银耳、枸杞、鸭肉", medicine: "六味地黄丸", life: "忌辛辣，睡前静坐" },
+        "湿热质": { tag: "清热化湿", food: "绿豆、薏苡仁、西芹、荷叶", medicine: "龙胆泻肝丸", life: "环境干燥，保持排便通畅" },
+        "痰湿质": { tag: "祛湿化痰", food: "陈皮、白萝卜、扁豆", medicine: "参苓白术散", life: "多户外活动，减重" },
+        "气郁质": { tag: "疏肝理气", food: "玫瑰花茶、佛手、柑橘", medicine: "逍遥丸、甘麦大枣汤", life: "多交流，移情易性" },
+        "血瘀质": { tag: "活血化瘀", food: "山楂、黑豆、红糖", medicine: "桂枝茯苓丸", life: "保持心情舒畅，常做拉伸" },
+        "特禀质": { tag: "扶正固表", food: "忌腥膻发物，多吃新鲜蔬果", medicine: "玉屏风散", life: "避开过敏原，提高免疫力" }
+    };
+
+    for(let name in results) {
+        if(results[name] >= 30 && adviceMap[name]) {
+            const adv = adviceMap[name];
+            advHtml += `
+                <div class="advice-section">
+                    <span class="tag">${adv.tag}</span>
+                    <p><b>饮食指导：</b>${adv.food}</p>
+                    <p><b>成药推荐：</b>${adv.medicine}</p>
+                    <p><b>起居调护：</b>${adv.life}</p>
+                </div>`;
+        }
+    }
+
+    // 补充课件中的四季养生逻辑
+    const month = new Date().getMonth() + 1;
+    let seasonStr = "";
+    if([3,4,5].includes(month)) seasonStr = "<b>春季：</b>养肝为先，省酸增甘，升发阳气（韭菜炒虾仁）。";
+    else if([6,7,8].includes(month)) seasonStr = "<b>夏季：</b>清补为主，减苦增辛，忌大寒（绿豆粥、鸭肉粥）。";
+    else if([9,10,11].includes(month)) seasonStr = "<b>秋季：</b>滋阴润肺，调理燥邪，宜吃百合、银耳。";
+    else seasonStr = "<b>冬季：</b>养藏为主，早卧晚起，温补肾阳（金匮肾气丸）。";
+
+    advHtml += `<div class="advice-section" style="background:#e3f2fd; border-left-color:#2196f3"><strong>当前季节特别建议：</strong><br>${seasonStr}</div>`;
+    
+    document.getElementById('adviceContent').innerHTML = advHtml;
+    window.scrollTo({ top: document.getElementById('report').offsetTop, behavior: 'smooth' });
+}
+</script>
+
+</body>
+</html>
